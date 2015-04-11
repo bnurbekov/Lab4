@@ -5,7 +5,7 @@ from kobuki_msgs.msg import BumperEvent
 # Add additional imports for each of the message types used
 from geometry_msgs.msg import Twist, PoseWithCovarianceStamped, PoseStamped, Point
 from nav_msgs.msg import Odometry, OccupancyGrid, MapMetaData, GridCells, Path
-from lab4.srv import *
+from bnurbekov_lab3.srv import *
 from tf.transformations import euler_from_quaternion
 
 #A class that has a function of cell type enumeration.

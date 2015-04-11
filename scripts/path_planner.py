@@ -86,6 +86,8 @@ def processOccupancyGrid(gridMessage):
 
     populateGrid()
 
+    expandObstacles()
+
     wasMapReceived = True
 
 def populateGrid():
@@ -103,6 +105,47 @@ def populateGrid():
             grid[tempCell.coordinate] = tempCell
 
             counter += 1
+
+def expandObstacles():
+    obstacles = {}
+
+    for cellKey in grid:
+        cell = grid[cellKey]
+        if cell.type == CellType.Obstacle:
+            obstacles[cell.coordinate] = cell
+
+    for cellKey in obstacles:
+        cell = obstacles[cellKey]
+        upValid = False
+        downValid = False
+        rightValid = False
+        leftValid = False
+
+        if cell.coordinate.x - 1 >= 0:
+            leftValid = True
+        if cell.coordinate.x + 1 < GRID_WIDTH:
+            rightValid = True
+        if cell.coordinate.y - 1 >= 0:
+            downValid = True
+        if cell.coordinate.y + 1 < GRID_HEIGHT:
+            upValid = True
+
+        if upValid:
+            grid[CellCoordinate(cell.coordinate.x,cell.coordinate.y+1)].type = CellType.Obstacle
+            if rightValid:
+                grid[CellCoordinate(cell.coordinate.x+1,cell.coordinate.y+1)].type = CellType.Obstacle
+            if leftValid:
+                grid[CellCoordinate(cell.coordinate.x-1,cell.coordinate.y+1)].type = CellType.Obstacle
+        if downValid:
+            grid[CellCoordinate(cell.coordinate.x,cell.coordinate.y-1)].type = CellType.Obstacle
+            if rightValid:
+                grid[CellCoordinate(cell.coordinate.x+1,cell.coordinate.y-1)].type = CellType.Obstacle
+            if leftValid:
+                grid[CellCoordinate(cell.coordinate.x-1,cell.coordinate.y-1)].type = CellType.Obstacle
+        if rightValid:
+            grid[CellCoordinate(cell.coordinate.x+1,cell.coordinate.y)].type = CellType.Obstacle
+        if leftValid:
+            grid[CellCoordinate(cell.coordinate.x-1,cell.coordinate.y)].type = CellType.Obstacle
 
 #Callback function that processes the initial position received.
 def processInitPos(initPos):

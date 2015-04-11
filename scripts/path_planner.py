@@ -112,6 +112,8 @@ def processInitPos(initPos):
     initPosCellX = (initPos.pose.pose.position.x - originalGridMessage.info.origin.position.x) // originalGridMessage.info.resolution
     initPosCellY = (initPos.pose.pose.position.y - originalGridMessage.info.origin.position.y) // originalGridMessage.info.resolution
 
+    print "Initial cell: X(%f), Y(%f)" % (initPosCellX, initPosCellY)
+
     tempCellCoordinate = CellCoordinate(initPosCellX, initPosCellY)
 
     if not wasInitPosReceived:
@@ -157,6 +159,8 @@ def processGoalPos(goalPos):
 
     goalPosCellX = (goalPos.pose.position.x - originalGridMessage.info.origin.position.x) // originalGridMessage.info.resolution
     goalPosCellY = (goalPos.pose.position.y - originalGridMessage.info.origin.position.y) // originalGridMessage.info.resolution
+
+    print "Goal cell: X(%f), Y(%f)" % (goalPosCellX, goalPosCellY)
 
     tempCellCoordinate = CellCoordinate(goalPosCellX, goalPosCellY)
 
@@ -307,12 +311,8 @@ def calculateWaypoints():
 def handleRequest(req):
     global waypoints
 
-    print "Please select initial and goal positions..."
-
     processInitPos(req.initPos)
     processGoalPos(req.goalPos)
-
-    print "Initial and goal positions were received!"
 
     aStarDone = initAStar()
 
@@ -321,6 +321,8 @@ def handleRequest(req):
         aStarDone = runAStarIteration()
 
     findPath()
+
+    publishPath()
 
     calculateWaypoints()
 
@@ -340,12 +342,12 @@ def handleRequest(req):
 
         path.poses.append(poseObj)
 
-    # poseObj = PoseStamped()
-    # poseObj.pose.position.x = req.goalPos.pose.position.x
-    # poseObj.pose.position.y = req.goalPos.pose.position.y
-    # poseObj.pose.position.z = 0
-    #
-    # path.poses.append(poseObj)
+    poseObj = PoseStamped()
+    poseObj.pose.position.x = req.goalPos.pose.position.x
+    poseObj.pose.position.y = req.goalPos.pose.position.y
+    poseObj.pose.position.z = 0
+
+    path.poses.append(poseObj)
 
     resetVariables()
 

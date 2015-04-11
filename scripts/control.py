@@ -7,9 +7,10 @@ from nav_msgs.msg import Odometry
 from lab4.srv import *
 from geometry_msgs.msg import Twist, PoseWithCovarianceStamped, PoseStamped, Point
 from tf.transformations import euler_from_quaternion
-from kobuki_msgs.msg import BumperEvent
 
 debug_mode = False
+WHEEL_RADIUS = 0.035
+DISTANCE_BETWEEN_WHEELS = 0.23
 
 def addAngles(angle1, angle2):
     result = angle1 + angle2
@@ -27,16 +28,11 @@ def addAngles(angle1, angle2):
     return result
 
 def publishTwist(x_vel, angular_vel):
-    pub = rospy.Publisher('cmd_vel_mux/input/teleop', Twist, queue_size = 1)
-
     twist = Twist()
     twist.linear.x = x_vel; twist.linear.y = 0; twist.linear.z = 0
     twist.angular.x = 0; twist.angular.y = 0; twist.angular.z = angular_vel
 
     pub.publish(twist)
-
-WHEEL_RADIUS = 0.035
-DISTANCE_BETWEEN_WHEELS = 0.23
 
 #This function accepts two wheel velocities and a time interval.
 def spinWheels(u1, u2, t):
@@ -52,90 +48,49 @@ def spinWheels(u1, u2, t):
 
     publishTwist(0, 0)
 
-#This function returns the list of speeds for acceleration/deceleration
-def createSpeedList(speed, numberOfFractions):
-    resultArray = []
-    diff = float(speed)/numberOfFractions
-
-    for i in range(0, numberOfFractions):
-        resultArray.append(diff*i)
-
-    return resultArray
-
 pos_tolerance = 0.1
 #This function accepts a speed and a distance for the robot to move in a straight line
 def driveStraight(speed, distance):
-    currentIndex = 0
-    speedList = createSpeedList(speed, 10)
-    isDriving = True
-
     destination_x = current_x + distance * math.cos(current_theta)
     destination_y = current_y + distance * math.sin(current_theta)
 
-    while isDriving:
-        # print "x: %f, y: %f, dest x: %f, dest y: %f" %(current_x,current_y, destination_x, destination_y)
+    while (current_x > destination_x + pos_tolerance or current_x < destination_x - pos_tolerance) \
+            or (current_y > destination_y + pos_tolerance or current_y < destination_y - pos_tolerance):
+        publishTwist(speed, 0)
 
-        isAccelerating = (current_x > destination_x + pos_tolerance or current_x < destination_x - pos_tolerance) \
-            or (current_y > destination_y + pos_tolerance or current_y < destination_y - pos_tolerance)
-
-        publishTwist(speedList[currentIndex], 0)
-
-        if isAccelerating:
-            if currentIndex < len(speedList) - 2:
-                if debug_mode:
-                    print "Accelerating: %f" % (speedList[currentIndex])
-                currentIndex += 1
-            else:
-                if debug_mode:
-                    print "Constant speed: %f" % (speedList[currentIndex])
-        else:
-            if currentIndex >= 0:
-                if debug_mode:
-                    print "Decelerating: %f" % (speedList[currentIndex])
-                currentIndex -= 1
-            else:
-                isDriving = False
+        # #transform the destination, so that it lies on X axis of the robot
+        # if original_theta != current_theta:
+        #     angle_difference = addAngles(current_theta, -original_theta)
+        #     original_theta = current_theta
+        #
+        #     destination_x = math.cos(angle_difference) * destination_x - math.sin(angle_difference) * destination_y
+        #     destination_y = math.sin(angle_difference) * destination_x + math.sin(angle_difference) * destination_y
+        #
+        #     print "New destination - X: %f, Y: %f; Angle: %f" % (destination_x, destination_y, angle_difference)
 
         #write logs
 
         rospy.sleep(rospy.Duration(0, 1))
 
+    publishTwist(0, 0)
+
+angle_tolerance = 0.1
 #Accepts an angle and makes the robot rotate around it.
 def rotate(angle):
     angular_vel = 1
-    currentIndex = 0
-    angularVelList = createSpeedList(angular_vel, 10)
-    isDriving = True
-    angle_tolerance = 0.1
 
     if angle < 0:
         angular_vel = -angular_vel
 
     destination_angle = addAngles(current_theta, angle)
 
-    while isDriving:
+    if debug_mode:
         print "Current theta: %f, Destination angle: %f, Angle: %f" % (current_theta, destination_angle, angle)
 
-        isAccelerating = current_theta > destination_angle + angle_tolerance \
-                         or current_theta < destination_angle - angle_tolerance
+    while current_theta > destination_angle + angle_tolerance or current_theta < destination_angle - angle_tolerance:
+        publishTwist(0, angular_vel)
 
-        publishTwist(0, angularVelList[currentIndex])
-
-        if isAccelerating:
-            if currentIndex < len(angularVelList) - 2:
-                if debug_mode:
-                    print "Accelerating: %f" % (angularVelList[currentIndex])
-                currentIndex += 1
-            else:
-                if debug_mode:
-                    print "Constant speed: %f" % (angularVelList[currentIndex])
-        else:
-            if currentIndex >= 0:
-                if debug_mode:
-                    print "Decelerating: %f" % (angularVelList[currentIndex])
-                currentIndex -= 1
-            else:
-                isDriving = False
+        #write logs
 
         rospy.sleep(rospy.Duration(0, 1))
 
@@ -144,69 +99,18 @@ def rotate(angle):
 #This function works the same as rotate how ever it does not publish linear velocities.
 def driveArc(radius, speed, angle):
     angular_vel = speed / radius
-    currentIndex = 0
-    speedList = createSpeedList(speed, 10)
-    angularVelList = createSpeedList(angular_vel, 10)
-    isDriving = True
-    angle_tolerance = 0.1
-
 
     if angle < 0:
         angular_vel = -angular_vel
 
     destination_angle = addAngles(current_theta, angle)
 
-    while isDriving:
-        isAccelerating = current_theta > destination_angle + angle_tolerance \
-                         or current_theta < destination_angle - angle_tolerance
-
-        publishTwist(speedList[currentIndex], angularVelList[currentIndex])
-
-        if isAccelerating:
-            if currentIndex < len(angularVelList) - 2:
-                if debug_mode:
-                    print "Accelerating: %f" % (angularVelList[currentIndex])
-                currentIndex += 1
-            else:
-                if debug_mode:
-                    print "Constant speed: %f" % (angularVelList[currentIndex])
-        else:
-            if currentIndex >= 0:
-                if debug_mode:
-                    print "Decelerating: %f" % (angularVelList[currentIndex])
-                currentIndex -= 1
-            else:
-                isDriving = False
+    while current_theta > destination_angle + angle_tolerance or current_theta < destination_angle - angle_tolerance:
+        publishTwist(speed, angular_vel)
 
         rospy.sleep(rospy.Duration(0, 1))
 
     publishTwist(0, 0)
-
-#Bumper Event Callback function
-def readBumper(msg):
-    if debug_mode:
-        print "Bumper was pressed! State: %d, Bumper: %d" % (msg.state, msg.bumper)
-
-    if msg.state == BumperEvent.PRESSED and msg.bumper == BumperEvent.CENTER:
-        global bumperPressed
-        bumperPressed = 1
-
-def goToPosition(goalX, goalY):
-    global current_x
-    global current_y
-    global current_theta
-
-    xDiff = goalX - current_x
-    yDiff = goalY - current_y
-
-    # adding current_theta is done in rotate(angle)
-    angle = math.atan2(yDiff, xDiff) - current_theta # x/y, not y/x
-
-    rotate(angle)
-
-    distance = math.sqrt(pow(xDiff, 2) + pow(yDiff, 2))
-    print "distance: %f" %distance
-    driveStraight(.1, distance)
 
 #Odometry Callback function.
 def read_odometry(msg):
@@ -224,8 +128,6 @@ def read_odometry(msg):
     current_y = msg.pose.pose.position.y
     current_theta = yaw
 
-    # print "read_odometry: X: %f, Y: %f, Theta: %f" % (current_x, current_y, current_theta)
-
     if not receivedInitialPos:
         receivedInitialPos = True
 
@@ -241,7 +143,7 @@ def processGoalPos(goalPos):
     receivedGoalPos = True
 
 def sendRequest(initPos, goalPos):
-    print "Entered sendRequest..."
+    print "Entered sendRequest()..."
 
     rospy.wait_for_service('calculateTrajectory')
 
@@ -251,12 +153,9 @@ def sendRequest(initPos, goalPos):
         calculateTraj = rospy.ServiceProxy('calculateTrajectory', Trajectory)
         trajectory = calculateTraj(initPos, goalPos)
 
-        # for point in trajectory.path.poses:
-        #     print "sendRequest: X: %f, Y: %f" % (point.pose.position.x, point.pose.position.y)
-
         return trajectory
     except rospy.ServiceException, e:
-        print "Service call failed: %s"%e
+        print "Service call failed: %s" % e
 
 #This function sequentially calls methods to perform a trajectory.
 def executeTrajectory(trajectory):
@@ -267,11 +166,28 @@ def executeTrajectory(trajectory):
         goalY = point.pose.position.y
 
         waypoint_counter = waypoint_counter + 1
-        print "Going to Waypoint %d" %waypoint_counter
+        print "Going to Waypoint %d" % waypoint_counter
         goToPosition(goalX, goalY)
 
+def goToPosition(goalX, goalY):
+    global current_x
+    global current_y
+    global current_theta
+
+    xDiff = goalX - current_x
+    yDiff = goalY - current_y
+
+    # adding current_theta is done in rotate(angle)
+    angle = math.atan2(yDiff, xDiff) - current_theta
+    print "Rotating by angle %f" % angle
+    rotate(angle)
+
+    distance = math.sqrt(pow(xDiff, 2) + pow(yDiff, 2))
+    print "Driving forward by distance: %f" % distance
+    driveStraight(.3, distance)
+
 if __name__ == "__main__":
-    rospy.init_node('control')
+    rospy.init_node('lab4_path_control')
 
     global receivedInitialPos
     global receivedGoalPos
@@ -286,6 +202,9 @@ if __name__ == "__main__":
     while not receivedInitialPos or not receivedGoalPos:
         pass
     print "Received initial and goal positions!"
+
+    print "Initial Position: X(%f), Y(%f)" % (current_x, current_y)
+    print "Goal Position: X(%f), Y(%f)" % (goalPosX, goalPosY)
 
     # doesn't matter what the values are
     initPos = PoseWithCovarianceStamped()

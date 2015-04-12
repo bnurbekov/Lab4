@@ -172,7 +172,7 @@ def goToPosition(goalX, goalY):
 
     distance = math.sqrt(pow(xDiff, 2) + pow(yDiff, 2))
     print "Driving forward by distance: %f" % distance
-    driveStraight(.1, distance)
+    driveStraight(.2, distance)
 
 if __name__ == "__main__":
     rospy.init_node('lab4_path_control')

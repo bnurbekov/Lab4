@@ -4,8 +4,7 @@ import rospy, time, math, Queue
 from kobuki_msgs.msg import BumperEvent
 # Add additional imports for each of the message types used
 from geometry_msgs.msg import Twist, PoseWithCovarianceStamped, PoseStamped, Point
-from nav_msgs.msg import Odometry, OccupancyGrid, MapMetaData, GridCells, Path
-from bnurbekov_lab3.srv import *
+from nav_msgs.msg import Odometry, OccupancyGrid, MapMetaData, GridCells
 from tf.transformations import euler_from_quaternion
 
 #A class that has a function of cell type enumeration.
@@ -63,6 +62,24 @@ class CellCoordinate:
     def __eq__(self, other):
         return (self.x == other.x) and (self.y == other.y)
 
+def expandObstacles():
+    obstacleCells = []
+
+    for cellKey in grid:
+        cell = grid[cellKey]
+        if cell.type == CellType.Obstacle:
+            obstacleCells.append(cell)
+
+    for obstacleCell in obstacleCells:
+        for i in range(0, 3):
+            for j in range(0, 3):
+                neigborCellCoordinate = CellCoordinate((obstacleCell.coordinate.x - 1) + j, (obstacleCell.coordinate.y - 1) + i)
+
+                if (neigborCellCoordinate.isWithinBoard(GRID_WIDTH, GRID_HEIGHT)
+                    and not neigborCellCoordinate.__eq__(cell.coordinate)):
+                    grid[neigborCellCoordinate].type = CellType.Obstacle
+
+
 #Callback function that processes the OccupancyGrid message.
 def processOccupancyGrid(gridMessage):
     #extract the position of the center of the occupancy grid
@@ -71,25 +88,12 @@ def processOccupancyGrid(gridMessage):
     global grid
     global GRID_WIDTH
     global GRID_HEIGHT
-    global cellOriginX
-    global cellOriginY
-
 
     originalGridMessage = gridMessage
     grid = {}
 
     GRID_HEIGHT = originalGridMessage.info.height
     GRID_WIDTH = originalGridMessage.info.width
-
-    cellOriginX = originalGridMessage.info.origin.position.x + originalGridMessage.info.resolution/2
-    cellOriginY = originalGridMessage.info.origin.position.y + originalGridMessage.info.resolution/2
-
-    populateGrid()
-
-    wasMapReceived = True
-
-def populateGrid():
-    global grid
 
     counter = 0
 
@@ -103,6 +107,10 @@ def populateGrid():
             grid[tempCell.coordinate] = tempCell
 
             counter += 1
+
+    expandObstacles()
+
+    wasMapReceived = True
 
 #Callback function that processes the initial position received.
 def processInitPos(initPos):
@@ -182,9 +190,15 @@ def createGridCellsMessage():
 
 #Publishes the grid as GridCells for RViz.
 def publishGridCells():
+    global cellOriginX
+    global cellOriginY
+
     unexploredGridCells = createGridCellsMessage()
     frontierGridCells = createGridCellsMessage()
     expandedGridCells = createGridCellsMessage()
+
+    cellOriginX = originalGridMessage.info.origin.position.x + originalGridMessage.info.resolution/2
+    cellOriginY = originalGridMessage.info.origin.position.y + originalGridMessage.info.resolution/2
 
     for i in range(0, originalGridMessage.info.height):
         for j in range(0, originalGridMessage.info.width):
@@ -304,81 +318,10 @@ def calculateWaypoints():
 
     waypoints.append(pathCellCoordinateList[len(pathCellCoordinateList) - 1])
 
-def handleRequest(req):
-    global waypoints
-
-    print "Please select initial and goal positions..."
-
-    processInitPos(req.initPos)
-    processGoalPos(req.goalPos)
-
-    print "Initial and goal positions were received!"
-
-    aStarDone = initAStar()
-
-    while not aStarDone:
-        #run iteration
-        aStarDone = runAStarIteration()
-
-    findPath()
-
-    calculateWaypoints()
-
-    print "Waypoints:"
-    for cellCoordinate in waypoints:
-        print cellCoordinate.x, cellCoordinate.y
-
-    #convert the waypoints to the trajectory offsets:
-    path = Path()
-    path.poses = []
-
-    for cellCoordinate in waypoints:
-        poseObj = PoseStamped()
-        poseObj.pose.position.x = cellOriginX + cellCoordinate.x*originalGridMessage.info.resolution
-        poseObj.pose.position.y = cellOriginY + cellCoordinate.y*originalGridMessage.info.resolution
-        poseObj.pose.position.z = 0
-
-        path.poses.append(poseObj)
-
-    # poseObj = PoseStamped()
-    # poseObj.pose.position.x = req.goalPos.pose.position.x
-    # poseObj.pose.position.y = req.goalPos.pose.position.y
-    # poseObj.pose.position.z = 0
-    #
-    # path.poses.append(poseObj)
-
-    resetVariables()
-
-    return TrajectoryResponse(path)
-
-#resets all the variables
-def resetVariables():
-    global wasInitPosReceived
-    global wasGoalPosReceived
-    global frontierList
-    global aStarDone
-    global grid
-    global waypoints
-
-    wasInitPosReceived = False
-    wasGoalPosReceived = False
-    aStarDone = False
-
-    del frontierList[:]
-    frontierList = []
-
-    del waypoints[:]
-    waypoints = []
-
-    grid.clear()
-
-    populateGrid()
-
-
-# This is the program's main function
+#This is the program's main function
 if __name__ == '__main__':
     # Change this node name to include your username
-    rospy.init_node('lab4_path_planner')
+    rospy.init_node('team_lab_3_node')
 
     global unexplored_cell_pub
     global expanded_cell_pub
@@ -398,6 +341,8 @@ if __name__ == '__main__':
     debugMode = True
 
     map_sub = rospy.Subscriber('/map', OccupancyGrid, processOccupancyGrid, queue_size=1)
+    init_pos_sub = rospy.Subscriber('/initialpose', PoseWithCovarianceStamped, processInitPos, queue_size=1)
+    goal_pos_sub = rospy.Subscriber('/move_base_simple/goal', PoseStamped, processGoalPos, queue_size=1)
     unexplored_cell_pub = rospy.Publisher('/unexploredGridCells', GridCells, queue_size=5) # Publisher for commanding robot motion
     expanded_cell_pub = rospy.Publisher('/expandedGridCells', GridCells, queue_size=5) # Publisher for commanding robot motion
     frontier_cell_pub = rospy.Publisher('/frontierGridCells', GridCells, queue_size=5) # Publisher for commanding robot motion
@@ -406,7 +351,7 @@ if __name__ == '__main__':
     # Use this command to make the program wait for some seconds
     # rospy.sleep(rospy.Duration(1, 0))
 
-    print "Starting Lab 4"
+    print "Starting Lab 3"
 
     print "Waiting for the occupancy grid..."
 
@@ -416,10 +361,38 @@ if __name__ == '__main__':
 
     print "Received initial occupancy grid!"
 
-    s = rospy.Service('calculateTrajectory', Trajectory, handleRequest)
-    print "Service is active now!"
-    rospy.spin()
+    print "Please select initial and goal positions..."
+
+    while not wasInitPosReceived or not wasGoalPosReceived:
+        pass
+
+    print "Initial and goal positions were received!"
+
+    aStarDone = initAStar()
+    publishGridCells()
+    time.sleep(.01)
+
+    while not aStarDone:
+        #run iteration
+        aStarDone = runAStarIteration()
+        publishGridCells()
+        time.sleep(.01)
+
+    if debugMode:
+        printGrid()
+
+    findPath()
+    publishPath()
+
+    calculateWaypoints()
+
+    print "Waypoints:"
+    for cellCoordinate in waypoints:
+        print cellCoordinate.x, cellCoordinate.y
+
+    print "Sleeping for 500 ms to make sure that the messages were sent..."
+    time.sleep(5)
 
     # wait for some time to make sure that subscribers get the message
 
-    print "Lab 4 complete!"
+    print "Lab 3 complete!"

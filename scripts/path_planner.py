@@ -56,6 +56,15 @@ class CellCoordinate:
         else:
             return 0
 
+    #Returns the indication of whether the cell is valid neighbor or not
+    def isValidNeighbor(self, neigborCellCoordinate):
+        xDiff = abs(self.x - neigborCellCoordinate.x)
+        yDiff = abs(self.y - neigborCellCoordinate.y)
+
+        return neigborCellCoordinate.isWithinBoard(GRID_WIDTH, GRID_HEIGHT) \
+               and not self.__eq__(neigborCellCoordinate) \
+               and (xDiff <= 1 and xDiff >= 0) and (yDiff <= 1 and yDiff >= 0)
+
     def __hash__(self):
         return hash((self.x, self.y))
 
@@ -63,9 +72,16 @@ class CellCoordinate:
         return (self.x == other.x) and (self.y == other.y)
 
 #Callback function that processes the OccupancyGrid message.
-def processOccupancyGrid(gridMessage):
-    #extract the position of the center of the occupancy grid
+def mapCallback(gridMessage):
+    global originalGridMessage
     global wasMapReceived
+    originalGridMessage = gridMessage
+
+    wasMapReceived = True
+
+#Processes the received occupancy grid message.
+def processOccupancyGrid():
+    #extract the position of the center of the occupancy grid
     global originalGridMessage
     global grid
     global GRID_WIDTH
@@ -73,8 +89,6 @@ def processOccupancyGrid(gridMessage):
     global cellOriginX
     global cellOriginY
 
-
-    originalGridMessage = gridMessage
     grid = {}
 
     GRID_HEIGHT = originalGridMessage.info.height
@@ -86,8 +100,6 @@ def processOccupancyGrid(gridMessage):
     populateGrid()
 
     expandObstacles()
-
-    wasMapReceived = True
 
 def populateGrid():
     global grid
@@ -119,8 +131,7 @@ def expandObstacles():
             for j in range(0, 3):
                 neigborCellCoordinate = CellCoordinate((obstacleCell.coordinate.x - 1) + j, (obstacleCell.coordinate.y - 1) + i)
 
-                if (neigborCellCoordinate.isWithinBoard(GRID_WIDTH, GRID_HEIGHT)
-                    and not neigborCellCoordinate.__eq__(cell.coordinate)):
+                if (obstacleCell.coordinate.isValidNeighbor(neigborCellCoordinate)):
                     grid[neigborCellCoordinate].type = CellType.Obstacle
 
 #Callback function that processes the initial position received.
@@ -150,8 +161,7 @@ def addNeighborsAsFrontiers(parentCell):
         for j in range(0, 3):
             currentCellCoordinate = CellCoordinate((parentCell.coordinate.x - 1) + j, (parentCell.coordinate.y - 1) + i)
 
-            if (currentCellCoordinate.isWithinBoard(GRID_WIDTH, GRID_HEIGHT)
-                and not currentCellCoordinate.__eq__(parentCell.coordinate)):
+            if (parentCell.coordinate.isValidNeighbor(currentCellCoordinate)):
                     currentCell = grid[currentCellCoordinate]
 
                     newPathCost = parentCell.pathCost + parentCell.coordinate\
@@ -253,7 +263,7 @@ def initAStar():
 #Runs an iteration of A* algorithm
 def runAStarIteration():
     if len(frontierList) == 0:
-        print "Error: Was not able to find the path to the destination!"
+        raise Exception("Error: Was not able to find the path to the destination!")
 
     nextParentCell = frontierList.pop(0)
     nextParentCell.type = CellType.Expanded
@@ -286,8 +296,6 @@ def findPath():
 
     pathCellCoordinateList.append(currentCellCoordinate)
 
-
-
 def publishPath():
     pathGridCells = createGridCellsMessage()
 
@@ -306,8 +314,7 @@ def calculateWaypoints():
     pathCellCoordinateList.reverse()
 
     if len(pathCellCoordinateList) < 2:
-        print "Error: Cannot extract waypoints from the empty path or path with only one node!"
-        return
+        raise Exception("Error: Cannot extract waypoints from the empty path or path with only one node!")
 
     waypoints = []
 
@@ -329,6 +336,8 @@ def calculateWaypoints():
 
 def handleRequest(req):
     global waypoints
+
+    processOccupancyGrid()
 
     processInitPos(req.initPos)
     processGoalPos(req.goalPos)
@@ -393,9 +402,6 @@ def resetVariables():
 
     grid.clear()
 
-    populateGrid()
-
-
 # This is the program's main function
 if __name__ == '__main__':
     # Change this node name to include your username
@@ -418,7 +424,7 @@ if __name__ == '__main__':
     aStarDone = False
     debugMode = True
 
-    map_sub = rospy.Subscriber('/map', OccupancyGrid, processOccupancyGrid, queue_size=1)
+    map_sub = rospy.Subscriber('/map', OccupancyGrid, mapCallback, queue_size=1)
     unexplored_cell_pub = rospy.Publisher('/unexploredGridCells', GridCells, queue_size=5) # Publisher for commanding robot motion
     expanded_cell_pub = rospy.Publisher('/expandedGridCells', GridCells, queue_size=5) # Publisher for commanding robot motion
     frontier_cell_pub = rospy.Publisher('/frontierGridCells', GridCells, queue_size=5) # Publisher for commanding robot motion

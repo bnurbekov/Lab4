@@ -6,7 +6,6 @@ from kobuki_msgs.msg import BumperEvent
 from geometry_msgs.msg import Twist, PoseWithCovarianceStamped, PoseStamped, Point
 from nav_msgs.msg import Odometry, OccupancyGrid, MapMetaData, GridCells, Path
 from lab4.srv import *
-from tf.transformations import euler_from_quaternion
 
 #A class that has a function of cell type enumeration.
 class CellType:
@@ -106,46 +105,23 @@ def populateGrid():
 
             counter += 1
 
+#Expands the obstacles
 def expandObstacles():
-    obstacles = {}
+    obstacleCells = []
 
     for cellKey in grid:
         cell = grid[cellKey]
         if cell.type == CellType.Obstacle:
-            obstacles[cell.coordinate] = cell
+            obstacleCells.append(cell)
 
-    for cellKey in obstacles:
-        cell = obstacles[cellKey]
-        upValid = False
-        downValid = False
-        rightValid = False
-        leftValid = False
+    for obstacleCell in obstacleCells:
+        for i in range(0, 3):
+            for j in range(0, 3):
+                neigborCellCoordinate = CellCoordinate((obstacleCell.coordinate.x - 1) + j, (obstacleCell.coordinate.y - 1) + i)
 
-        if cell.coordinate.x - 1 >= 0:
-            leftValid = True
-        if cell.coordinate.x + 1 < GRID_WIDTH:
-            rightValid = True
-        if cell.coordinate.y - 1 >= 0:
-            downValid = True
-        if cell.coordinate.y + 1 < GRID_HEIGHT:
-            upValid = True
-
-        if upValid:
-            grid[CellCoordinate(cell.coordinate.x,cell.coordinate.y+1)].type = CellType.Obstacle
-            if rightValid:
-                grid[CellCoordinate(cell.coordinate.x+1,cell.coordinate.y+1)].type = CellType.Obstacle
-            if leftValid:
-                grid[CellCoordinate(cell.coordinate.x-1,cell.coordinate.y+1)].type = CellType.Obstacle
-        if downValid:
-            grid[CellCoordinate(cell.coordinate.x,cell.coordinate.y-1)].type = CellType.Obstacle
-            if rightValid:
-                grid[CellCoordinate(cell.coordinate.x+1,cell.coordinate.y-1)].type = CellType.Obstacle
-            if leftValid:
-                grid[CellCoordinate(cell.coordinate.x-1,cell.coordinate.y-1)].type = CellType.Obstacle
-        if rightValid:
-            grid[CellCoordinate(cell.coordinate.x+1,cell.coordinate.y)].type = CellType.Obstacle
-        if leftValid:
-            grid[CellCoordinate(cell.coordinate.x-1,cell.coordinate.y)].type = CellType.Obstacle
+                if (neigborCellCoordinate.isWithinBoard(GRID_WIDTH, GRID_HEIGHT)
+                    and not neigborCellCoordinate.__eq__(cell.coordinate)):
+                    grid[neigborCellCoordinate].type = CellType.Obstacle
 
 #Callback function that processes the initial position received.
 def processInitPos(initPos):

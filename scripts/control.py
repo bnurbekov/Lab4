@@ -51,24 +51,11 @@ def spinWheels(u1, u2, t):
 pos_tolerance = 0.1
 #This function accepts a speed and a distance for the robot to move in a straight line
 def driveStraight(speed, distance):
-    destination_x = current_x + distance * math.cos(current_theta)
-    destination_y = current_y + distance * math.sin(current_theta)
+    startPos_x = current_x
+    startPos_y = current_y
 
-    while (current_x > destination_x + pos_tolerance or current_x < destination_x - pos_tolerance) \
-            or (current_y > destination_y + pos_tolerance or current_y < destination_y - pos_tolerance):
+    while math.sqrt(math.pow(current_x-startPos_x, 2) + math.pow(current_y-startPos_y, 2)) < distance:
         publishTwist(speed, 0)
-
-        # #transform the destination, so that it lies on X axis of the robot
-        # if original_theta != current_theta:
-        #     angle_difference = addAngles(current_theta, -original_theta)
-        #     original_theta = current_theta
-        #
-        #     destination_x = math.cos(angle_difference) * destination_x - math.sin(angle_difference) * destination_y
-        #     destination_y = math.sin(angle_difference) * destination_x + math.sin(angle_difference) * destination_y
-        #
-        #     print "New destination - X: %f, Y: %f; Angle: %f" % (destination_x, destination_y, angle_difference)
-
-        #write logs
 
         rospy.sleep(rospy.Duration(0, 1))
 
@@ -179,12 +166,13 @@ def goToPosition(goalX, goalY):
 
     # adding current_theta is done in rotate(angle)
     angle = math.atan2(yDiff, xDiff) - current_theta
-    print "Rotating by angle %f" % angle
+    print "Current angle: %f" % current_theta
+    print "Rotating by angle: %f" % angle
     rotate(angle)
 
     distance = math.sqrt(pow(xDiff, 2) + pow(yDiff, 2))
     print "Driving forward by distance: %f" % distance
-    driveStraight(.3, distance)
+    driveStraight(.1, distance)
 
 if __name__ == "__main__":
     rospy.init_node('lab4_path_control')
@@ -218,6 +206,9 @@ if __name__ == "__main__":
 
     #  give initial and goal to find all waypoints; when handleRequest is called
     trajectory = sendRequest(initPos, goalPos)
+
+    for point in trajectory.path.poses:
+        print point.pose.position.x, point.pose.position.y
 
     print "Starting trajectory"
 

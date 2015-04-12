@@ -75,9 +75,11 @@ class CellCoordinate:
 def mapCallback(gridMessage):
     global originalGridMessage
     global wasMapReceived
-    originalGridMessage = gridMessage
 
-    wasMapReceived = True
+    if not wasMapReceived:
+        originalGridMessage = gridMessage
+
+        wasMapReceived = True
 
 #Processes the received occupancy grid message.
 def processOccupancyGrid():
@@ -148,7 +150,7 @@ def processInitPos(initPos):
 
     if not wasInitPosReceived:
         if not tempCellCoordinate.isWithinBoard(GRID_WIDTH, GRID_HEIGHT):
-            print "Error: The position selected was outside of the grid! Please, try again."
+            raise Exception("Error: The position selected was outside of the grid! Please, try again.")
         else:
             #we can store the init pos as the global variable
             initPosCellCoordinate = tempCellCoordinate
@@ -195,7 +197,7 @@ def processGoalPos(goalPos):
 
     if not wasGoalPosReceived:
         if not tempCellCoordinate.isWithinBoard(GRID_WIDTH, GRID_HEIGHT):
-            print "Error: The position selected was outside of the grid! Please, try again."
+            raise Exception("Error: The position selected was outside of the grid! Please, try again.")
         else:
             goalPosCellCoordinate = CellCoordinate(goalPosCellX, goalPosCellY)
             wasGoalPosReceived = True
@@ -313,8 +315,8 @@ def calculateWaypoints():
 
     pathCellCoordinateList.reverse()
 
-    if len(pathCellCoordinateList) < 2:
-        raise Exception("Error: Cannot extract waypoints from the empty path or path with only one node!")
+    if len(pathCellCoordinateList) < 1:
+        raise Exception("Error: Cannot extract waypoints from the empty path!")
 
     waypoints = []
 

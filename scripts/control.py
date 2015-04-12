@@ -9,7 +9,7 @@ from geometry_msgs.msg import Twist, PoseWithCovarianceStamped, PoseStamped, Poi
 from tf.transformations import euler_from_quaternion
 from threading import Thread
 
-debug_mode = False
+debug_mode = True
 WHEEL_RADIUS = 0.035
 DISTANCE_BETWEEN_WHEELS = 0.23
 
@@ -70,12 +70,19 @@ def driveStraight(speed, distance):
 angle_tolerance = 0.1
 #Accepts an angle and makes the robot rotate around it.
 def rotate(angle):
-    angular_vel = 1
-
-    if angle < 0:
-        angular_vel = -angular_vel
-
     destination_angle = addAngles(current_theta, angle)
+
+    if (destination_angle > current_theta):
+        if (destination_angle - current_theta < math.pi):
+            angular_vel = 1
+        else:
+            angular_vel = -1
+    else:
+        if (current_theta - destination_angle < math.pi):
+            angular_vel = -1
+        else:
+            angular_vel = 1
+
 
     if debug_mode:
         print "Current theta: %f, Destination angle: %f, Angle: %f" % (current_theta, destination_angle, angle)
@@ -236,6 +243,9 @@ if __name__ == "__main__":
     while not receivedInitialPos or not receivedGoalPos:
         pass
     print "Received initial and goal positions!"
+
+    rotate(-5)
+
 
     print "Initial Position: X(%f), Y(%f)" % (current_x, current_y)
     print "Goal Position: X(%f), Y(%f)" % (goalPosX, goalPosY)

@@ -7,6 +7,7 @@ from nav_msgs.msg import Odometry
 from lab4.srv import *
 from geometry_msgs.msg import Twist, PoseWithCovarianceStamped, PoseStamped, Point
 from tf.transformations import euler_from_quaternion
+from threading import Thread
 
 debug_mode = False
 WHEEL_RADIUS = 0.035
@@ -57,9 +58,14 @@ def driveStraight(speed, distance):
     while math.sqrt(math.pow(current_x-startPos_x, 2) + math.pow(current_y-startPos_y, 2)) < distance:
         publishTwist(speed, 0)
 
+        if isNewTrajectoryReady:
+            return False
+
         rospy.sleep(rospy.Duration(0, 1))
 
     publishTwist(0, 0)
+
+    return True
 
 angle_tolerance = 0.1
 #Accepts an angle and makes the robot rotate around it.
@@ -77,11 +83,14 @@ def rotate(angle):
     while current_theta > destination_angle + angle_tolerance or current_theta < destination_angle - angle_tolerance:
         publishTwist(0, angular_vel)
 
-        #write logs
+        if isNewTrajectoryReady:
+            return False
 
         rospy.sleep(rospy.Duration(0, 1))
 
     publishTwist(0, 0)
+
+    return True
 
 #This function works the same as rotate how ever it does not publish linear velocities.
 def driveArc(radius, speed, angle):
@@ -129,33 +138,59 @@ def processGoalPos(goalPos):
 
     receivedGoalPos = True
 
-def sendRequest(initPos, goalPos):
-    print "Entered sendRequest()..."
+def getPathToGoal():
+    global trajectory
+    global isNewTrajectoryReady
 
-    rospy.wait_for_service('calculateTrajectory')
+    while not reachedGoal:
+        initPos = PoseWithCovarianceStamped()
+        initPos.pose.pose.position.x = current_x
+        initPos.pose.pose.position.y = current_y
 
-    print "Finished wait_for_service..."
+        goalPos = PoseStamped()
+        goalPos.pose.position.x = goalPosX
+        goalPos.pose.position.y = goalPosY
 
-    try:
-        calculateTraj = rospy.ServiceProxy('calculateTrajectory', Trajectory)
-        trajectory = calculateTraj(initPos, goalPos)
+        print "Entered wait_for_service()..."
 
-        return trajectory
-    except rospy.ServiceException, e:
-        print "Service call failed: %s" % e
+        rospy.wait_for_service('calculateTrajectory')
+
+        print "Finished wait_for_service()..."
+
+        try:
+            calculateTraj = rospy.ServiceProxy('calculateTrajectory', Trajectory)
+            trajectory = calculateTraj(initPos, goalPos)
+
+            isNewTrajectoryReady = True
+        except rospy.ServiceException, e:
+            print "Service call failed: %s" % e
 
 #This function sequentially calls methods to perform a trajectory.
-def executeTrajectory(trajectory):
-    waypoint_counter = 0
+def executeTrajectory():
+    global reachedGoal
+    global isNewTrajectoryReady
 
-    for point in trajectory.path.poses:
-        goalX = point.pose.position.x
-        goalY = point.pose.position.y
+    #Wait for the initial trajectory
+    while not isNewTrajectoryReady:
+        pass
 
-        waypoint_counter = waypoint_counter + 1
-        print "Going to Waypoint %d" % waypoint_counter
-        goToPosition(goalX, goalY)
+    while not reachedGoal:
+        counter = 0
+        isNewTrajectoryReady = False
 
+        for point in trajectory.path.poses:
+            goalX = point.pose.position.x
+            goalY = point.pose.position.y
+
+            if not goToPosition(goalX, goalY):
+                break
+
+            if counter >= (len(trajectory.path.poses) - 1):
+                reachedGoal = True
+
+            counter += 1
+
+#Commands the robot to go to the position specified
 def goToPosition(goalX, goalY):
     global current_x
     global current_y
@@ -168,21 +203,32 @@ def goToPosition(goalX, goalY):
     angle = math.atan2(yDiff, xDiff) - current_theta
     print "Current angle: %f" % current_theta
     print "Rotating by angle: %f" % angle
-    rotate(angle)
+    if not rotate(angle):
+        return False
 
     distance = math.sqrt(pow(xDiff, 2) + pow(yDiff, 2))
     print "Driving forward by distance: %f" % distance
-    driveStraight(.2, distance)
+    if not driveStraight(.15, distance):
+        return False
+
+    return True
 
 if __name__ == "__main__":
+    #Initialize the new node
     rospy.init_node('lab4_path_control')
 
     global receivedInitialPos
     global receivedGoalPos
+    global isNewTrajectoryReady
+    global reachedGoal
+    global trajectory
+
+    reachedGoal = False
+    isNewTrajectoryReady = False
     receivedInitialPos = False
     receivedGoalPos = False
 
-    pub = rospy.Publisher('cmd_vel_mux/input/teleop', Twist, queue_size=5) # Publisher for commanding robot motion
+    pub = rospy.Publisher('/cmd_vel_mux/input/teleop', Twist, queue_size=5) # Publisher for commanding robot motion
     odom_sub = rospy.Subscriber('/odom', Odometry, read_odometry, queue_size=1) # Callback function to read in robot Odometry messages
     goal_pos_sub = rospy.Subscriber('/goalPos', PoseStamped, processGoalPos, queue_size=1)
 
@@ -194,21 +240,10 @@ if __name__ == "__main__":
     print "Initial Position: X(%f), Y(%f)" % (current_x, current_y)
     print "Goal Position: X(%f), Y(%f)" % (goalPosX, goalPosY)
 
-    # doesn't matter what the values are
-    initPos = PoseWithCovarianceStamped()
-    initPos.pose.pose.position.x = current_x
-    initPos.pose.pose.position.y = current_y
-    goalPos = PoseStamped()
-    goalPos.pose.position.x = goalPosX
-    goalPos.pose.position.y = goalPosY
-
-    print "About to send request to path_planner to get trajectory..."
-
-    #  give initial and goal to find all waypoints; when handleRequest is called
-    trajectory = sendRequest(initPos, goalPos)
-
-    for point in trajectory.path.poses:
-        print point.pose.position.x, point.pose.position.y
+    print "Starting getPathToGoal() thread:"
+    Thread(target=getPathToGoal).start()
+    print "Starting executeTrajectory() thread:"
+    Thread(target=executeTrajectory).start()
 
     print "Starting trajectory"
 

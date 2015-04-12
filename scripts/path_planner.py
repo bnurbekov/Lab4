@@ -318,8 +318,6 @@ def calculateWaypoints():
 
     waypoints = []
 
-    waypoints.append(pathCellCoordinateList[0])
-
     lastXDiff = pathCellCoordinateList[1].x - pathCellCoordinateList[0].x
     lastYDiff = pathCellCoordinateList[1].y - pathCellCoordinateList[0].y
 
@@ -369,13 +367,6 @@ def handleRequest(req):
         poseObj.pose.position.z = 0
 
         path.poses.append(poseObj)
-
-    poseObj = PoseStamped()
-    poseObj.pose.position.x = req.goalPos.pose.position.x
-    poseObj.pose.position.y = req.goalPos.pose.position.y
-    poseObj.pose.position.z = 0
-
-    path.poses.append(poseObj)
 
     resetVariables()
 

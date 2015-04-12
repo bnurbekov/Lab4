@@ -33,8 +33,8 @@ class CellCoordinate:
 
     #Checks if the cell coordinate is within the board.
     def isWithinBoard(self, boardWidth, boardHeight):
-        return (self.x <= boardWidth-1 or self.x >= 0) and \
-               (self.y <= boardHeight-1 or self.y >= 0)
+        return (self.x <= boardWidth-1 and self.x >= 0) and \
+               (self.y <= boardHeight-1 and self.y >= 0)
 
     #Estimates the heurestic.
     def getHeuristic(self, destinationCellCoordinate):
